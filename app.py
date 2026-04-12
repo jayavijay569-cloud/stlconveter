@@ -1,11 +1,11 @@
 """
-ForgeConvert Backend — Flask + GMSH + AI Chatbot
-STEP/STP/IGES → STL : gmsh (industrial grade, pip install gmsh)
-OBJ/GLB/GLTF  → handled by frontend
+ForgeConvert Backend — Flask + Trimesh + AI Chatbot
+STEP/STP/IGES/OBJ/GLB/GLTF/FBX → STL : trimesh (pip install trimesh)
+OBJ/GLB/GLTF  → also handled by frontend
 Chatbot        → Claude API (anthropic)
 """
 
-import os, io, uuid, zipfile, tempfile, traceback
+import os, io, uuid, zipfile, tempfile, traceback, requests
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -15,7 +15,10 @@ CORS(app)
 
 MAX_MB        = 500
 UPLOAD_FOLDER = tempfile.gettempdir()
-ALLOWED_EXT   = {'.step', '.stp', '.iges', '.igs', '.stl', '.obj', '.brep'}
+ALLOWED_EXT   = {'.step', '.stp', '.iges', '.igs', '.stl',
+                 '.obj', '.glb', '.gltf', '.fbx', '.3ds',
+                 '.dae', '.ply', '.3mf', '.brep', '.dxf'}
+
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
 
 # Claude API key — Render lo environment variable ga set cheyyandi
@@ -26,64 +29,103 @@ def get_ext(fn): return os.path.splitext(fn.lower())[1]
 def allowed(fn): return get_ext(fn) in ALLOWED_EXT
 
 
-# ── Core: GMSH conversion ─────────────────────────────────────
+# ── Core: Trimesh conversion ──────────────────────────────────
 def convert_to_stl(in_path: str, out_path: str):
     """
-    Uses GMSH via subprocess to avoid threading/signal issues in Flask.
-    Runs GMSH in a separate Python process — safe from any thread.
+    Uses trimesh to load any supported 3D format and export as binary STL.
+    Supports: STEP, STP, IGES, OBJ, GLB, GLTF, FBX, DAE, PLY, 3MF, STL, DXF
+    For STEP/IGES: uses cascadio (Open CASCADE) via trimesh if available,
+    otherwise falls back to trimesh loader.
     """
-    import subprocess, sys
+    import trimesh
+    import numpy as np
 
-    script = f"""
-import gmsh, sys
-gmsh.initialize(["-noterm"])
-gmsh.option.setNumber("General.Terminal", 0)
-try:
-    gmsh.model.add("model")
-    gmsh.merge({repr(in_path)})
-    gmsh.model.occ.synchronize()
-    gmsh.option.setNumber("Mesh.Algorithm", 6)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthFactor", 0.15)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", 0)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 1e22)
-    gmsh.option.setNumber("Mesh.RecombineAll", 0)
-    gmsh.option.setNumber("Mesh.Optimize", 1)
-    gmsh.option.setNumber("Mesh.OptimizeNetgen", 1)
-    gmsh.option.setNumber("Mesh.SmoothRatio", 1.8)
-    gmsh.option.setNumber("Mesh.AngleSmoothNormals", 30)
-    gmsh.model.mesh.generate(2)
-    gmsh.model.mesh.optimize("Netgen")
-    gmsh.option.setNumber("Mesh.Binary", 1)
-    gmsh.write({repr(out_path)})
-    gmsh.finalize()
-    sys.exit(0)
-except Exception as e:
-    gmsh.finalize()
-    print("GMSH_ERROR:", e, file=sys.stderr)
-    sys.exit(1)
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True, text=True, timeout=120
-    )
+    ext = get_ext(in_path)
 
-    if result.returncode != 0:
-        err = result.stderr.strip().split("GMSH_ERROR:")[-1].strip()
-        raise RuntimeError(f"GMSH: {err or result.stderr.strip()}")
+    # STEP / IGES — try cascadio (Open CASCADE Python bindings)
+    if ext in ('.step', '.stp', '.iges', '.igs', '.brep'):
+        try:
+            import cascadio
+            mesh = cascadio.load(in_path)
+            # cascadio returns vertices + faces as numpy arrays
+            tm = trimesh.Trimesh(
+                vertices=np.array(mesh.vertices),
+                faces=np.array(mesh.faces),
+                process=True
+            )
+        except ImportError:
+            # cascadio not available — use trimesh directly
+            # (works for simple STEP files; complex CAD may fail)
+            loaded = trimesh.load(in_path, force='mesh')
+            tm = _to_single_mesh(loaded)
+    else:
+        loaded = trimesh.load(in_path, force='mesh')
+        tm = _to_single_mesh(loaded)
 
-    if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
-        raise RuntimeError("GMSH produced empty output — file may be corrupt.")
+    if tm is None or len(tm.faces) == 0:
+        raise RuntimeError("No geometry found — file may be empty or corrupt.")
+
+    # Fix mesh issues
+    tm.remove_duplicate_faces()
+    tm.remove_degenerate_faces()
+    if not tm.is_watertight:
+        trimesh.repair.fill_holes(tm)
+        trimesh.repair.fix_normals(tm)
+
+    # Export binary STL
+    stl_bytes = tm.export(file_type='stl')
+    with open(out_path, 'wb') as f:
+        f.write(stl_bytes)
+
+    if os.path.getsize(out_path) == 0:
+        raise RuntimeError("Conversion produced empty STL — check input file.")
+
+
+def _to_single_mesh(loaded):
+    """Convert trimesh Scene or Geometry to a single Trimesh object."""
+    import trimesh
+    import numpy as np
+
+    if isinstance(loaded, trimesh.Scene):
+        # Merge all meshes in the scene
+        meshes = [g for g in loaded.geometry.values()
+                  if isinstance(g, trimesh.Trimesh) and len(g.faces) > 0]
+        if not meshes:
+            raise RuntimeError("Scene contains no mesh geometry.")
+        if len(meshes) == 1:
+            return meshes[0]
+        # Concatenate all meshes
+        return trimesh.util.concatenate(meshes)
+    elif isinstance(loaded, trimesh.Trimesh):
+        return loaded
+    else:
+        raise RuntimeError(f"Unexpected geometry type: {type(loaded)}")
 
 
 # ── Routes ────────────────────────────────────────────────────
 @app.route('/health')
 def health():
     try:
-        import gmsh
-        gmsh_ok = True
+        import trimesh
+        trimesh_ok = True
+        trimesh_ver = trimesh.__version__
     except:
-        gmsh_ok = False
-    return jsonify({'status': 'ok', 'gmsh': gmsh_ok, 'formats': list(ALLOWED_EXT)})
+        trimesh_ok = False
+        trimesh_ver = 'not installed'
+
+    try:
+        import cascadio
+        cascadio_ok = True
+    except:
+        cascadio_ok = False
+
+    return jsonify({
+        'status'      : 'ok',
+        'trimesh'     : trimesh_ok,
+        'trimesh_ver' : trimesh_ver,
+        'cascadio'    : cascadio_ok,
+        'formats'     : sorted(list(ALLOWED_EXT))
+    })
 
 
 @app.route('/convert', methods=['POST'])
@@ -97,7 +139,10 @@ def convert():
 
     filename = secure_filename(f.filename)
     if not allowed(filename):
-        return jsonify({'error': f'Unsupported format: {get_ext(filename)}. Supported: {", ".join(ALLOWED_EXT)}'}), 415
+        return jsonify({
+            'error': f'Unsupported format: {get_ext(filename)}. '
+                     f'Supported: {", ".join(sorted(ALLOWED_EXT))}'
+        }), 415
 
     jid      = str(uuid.uuid4())
     ext      = get_ext(filename)
@@ -107,12 +152,20 @@ def convert():
 
     try:
         f.save(in_path)
-        print(f'[Convert] {filename} ({os.path.getsize(in_path)//1024} KB)')
+        size_kb = os.path.getsize(in_path) // 1024
+        print(f'[Convert] {filename} ({size_kb} KB)')
+
         convert_to_stl(in_path, out_path)
-        size = os.path.getsize(out_path)
-        print(f'[Convert] OK → {out_name} ({size//1024} KB)')
-        return send_file(out_path, mimetype='application/octet-stream',
-                         as_attachment=True, download_name=out_name)
+
+        out_size = os.path.getsize(out_path)
+        print(f'[Convert] OK → {out_name} ({out_size // 1024} KB)')
+
+        return send_file(
+            out_path,
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=out_name
+        )
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -120,7 +173,8 @@ def convert():
         for p in [in_path, out_path]:
             try:
                 if os.path.exists(p): os.remove(p)
-            except: pass
+            except:
+                pass
 
 
 @app.route('/convert-bulk', methods=['POST'])
@@ -136,8 +190,10 @@ def convert_bulk():
         for f in uploaded:
             filename = secure_filename(f.filename or 'file')
             ext      = get_ext(filename)
+
             if not allowed(filename):
-                errors.append(f'{filename}: unsupported'); continue
+                errors.append(f'{filename}: unsupported format')
+                continue
 
             jid      = str(uuid.uuid4())
             in_path  = os.path.join(UPLOAD_FOLDER, f'{jid}_in{ext}')
@@ -156,15 +212,21 @@ def convert_bulk():
                 for p in [in_path, out_path]:
                     try:
                         if os.path.exists(p): os.remove(p)
-                    except: pass
+                    except:
+                        pass
 
     zip_buf.seek(0)
     if zip_buf.getbuffer().nbytes <= 22:
-        return jsonify({'error': 'All failed', 'details': errors}), 500
+        return jsonify({'error': 'All conversions failed', 'details': errors}), 500
 
-    resp = send_file(zip_buf, mimetype='application/zip',
-                     as_attachment=True, download_name='ForgeConvert_STL_Export.zip')
-    if errors: resp.headers['X-Errors'] = ' | '.join(errors)
+    resp = send_file(
+        zip_buf,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='ForgeConvert_STL_Export.zip'
+    )
+    if errors:
+        resp.headers['X-Errors'] = ' | '.join(errors)
     return resp
 
 
@@ -179,12 +241,11 @@ def chat():
         return jsonify({'error': 'No message provided'}), 400
 
     if not ANTHROPIC_API_KEY:
-        return jsonify({'error': 'API key not configured'}), 500
+        return jsonify({'error': 'ANTHROPIC_API_KEY not configured on server'}), 500
 
     user_message = data.get('message', '').strip()[:2000]
-    history      = data.get('history', [])[-10:]  # last 10 messages only
+    history      = data.get('history', [])[-10:]
 
-    # Build messages list
     messages = []
     for h in history:
         if h.get('role') in ('user', 'assistant') and h.get('content'):
@@ -204,7 +265,7 @@ def chat():
                 'max_tokens': 1024,
                 'system'    : (
                     'You are ForgeBot, a helpful CAD and 3D printing expert assistant '
-                    'for ForgeConvert — a tool that converts STEP, STP, OBJ, IGES files to STL. '
+                    'for ForgeConvert — a tool that converts STEP, STP, OBJ, IGES, FBX, GLB files to STL. '
                     'Help users with: file format questions, 3D printing tips, CAD software advice, '
                     'conversion issues, and STL troubleshooting. '
                     'Keep answers concise and practical. '
@@ -233,5 +294,5 @@ def index():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f'ForgeConvert v4.0 (GMSH engine) on http://0.0.0.0:{port}')
+    print(f'ForgeConvert v5.0 (Trimesh engine) on http://0.0.0.0:{port}')
     app.run(host='0.0.0.0', port=port, debug=False)
