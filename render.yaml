@@ -1,11 +1,10 @@
 services:
   - type: web
-    name: forgeconvert-api
+    name: forgeconvert
     env: python
-    region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    buildCommand: apt-get install -y libglu1-mesa libgl1-mesa-glx libxi6 && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
