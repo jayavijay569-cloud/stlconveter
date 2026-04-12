@@ -3,9 +3,10 @@ flask-cors==4.0.1
 werkzeug==3.0.3
 trimesh==4.4.1
 numpy==1.26.4
-requests==2.32.3
+networkx
 gunicorn==22.0.0
-cascadio==0.0.17
+requests
+cascadio
 
 # Optional: better STEP/IGES support
 #cascadio==0.0.8
