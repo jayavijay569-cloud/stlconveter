@@ -206,6 +206,10 @@ def chat():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/google2a3c218694012ee4.html')
+def google_verify():
+    return 'google-site-verification: google2a3c218694012ee4.html'
+
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
