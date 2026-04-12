@@ -6,7 +6,7 @@ numpy==1.26.4
 requests==2.32.3
 gunicorn==22.0.0
 # Optional: better STEP/IGES support
-cascadio==0.0.8
+#cascadio==0.0.8
 
 # For STEP/IGES conversion — uncomment ONE of these on Render:
 # Option A — cadquery (recommended, easier install)
