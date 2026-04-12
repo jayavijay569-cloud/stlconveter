@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>ForgeConvert — 3D File Converter</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* ── TOKENS ── */
+:root{
+  --bg:#070d1a;
+  --surface:#0b1221;
+  --card:#101828;
+  --border:#1a2540;
+  --accent:#7c8cff;
+  --accent2:#ff7eb3;
+  --accent3:#4dd9c0;
+  --text:#e8eaf6;
+  --muted:#7880a8;
+  --r:16px;
+  --nav:60px;
+  --shadow:0 8px 40px rgba(124,140,255,.18);
+}
+[data-theme="light"]{
+  --bg:#f8f9ff;
+  --surface:#fff;
+  --card:#fff;
+  --border:#dde2f8;
+  --accent:#5a52e0;
+  --accent2:#e84f8a;
+  --accent3:#1abfa8;
+  --text:#0d1130;
+  --muted:#5a6290;
+  --shadow:0 8px 40px rgba(90,82,224,.10);
+}
+
+/* ── RESET ── */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+img,svg{display:block;max-width:100%}
+button{font-family:inherit;cursor:pointer}
+a{text-decoration:none}
+
+/* ── BASE ── */
+body{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100vh;overflow-x:hidden;
+  transition:background .4s,color .4s;
+  line-height:1.6;
+}
+
+/* ── BG GLOW ── */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 55% 45% at 10% 10%,rgba(100,80,255,.18) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 50% at 90% 85%,rgba(77,217,192,.13) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 35% at 55%  0%,rgba(255,100,160,.10) 0%,transparent 55%),
+    radial-gradient(ellipse 30% 40% at 80% 30%,rgba(124,200,255,.08) 0%,transparent 50%);
+}
+[data-theme="light"] body::before{
+  background:
+    radial-gradient(ellipse 60% 40% at 10% 10%,rgba(200,210,255,.55) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 50% at 90% 85%,rgba(180,240,230,.45) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 30% at 55%  0%,rgba(255,200,230,.35) 0%,transparent 55%);
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:var(--nav);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  background:rgba(7,13,26,.90);
+  border-bottom:1px solid var(--border);
+  transition:background .4s;
+}
+[data-theme="light"] nav{background:rgba(248,249,255,.94)}
+.nav-inner{
+  max-width:1200px;margin:auto;
+  padding:0 clamp(16px,4vw,32px);
+  height:100%;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.logo{
+  font-family:'Outfit',sans-serif;font-weight:800;
+  font-size:clamp(1.05rem,3vw,1.3rem);
+  letter-spacing:-.5px;white-space:nowrap;
+  background:linear-gradient(270deg,#a78bfa,#7c8cff,#4dd9c0,#ff7eb3,#fbbf24,#a78bfa);
+  background-size:400% 400%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:fluidFlow 6s ease infinite;
+}
+.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.theme-label{
+  font-size:.75rem;color:var(--muted);font-weight:500;
+  display:none;
+}
+@media(min-width:480px){.theme-label{display:block}}
+.theme-icon-btn{
+  width:36px;height:36px;border-radius:10px;
+  background:var(--card);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text);transition:all .25s;flex-shrink:0;
+}
+.theme-icon-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff;transform:scale(1.08)}
+.theme-icon-btn svg{width:18px;height:18px;pointer-events:none}
+
+/* ── HERO ── */
+.hero{
+  min-height:100svh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  padding:calc(var(--nav) + 32px) clamp(16px,5vw,32px) 48px;
+  position:relative;z-index:1;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 14px;border-radius:99px;
+  border:1px solid var(--accent);
+  background:rgba(124,140,255,.09);
+  font-size:clamp(.7rem,.9vw,.78rem);font-weight:600;color:var(--accent);
+  margin-bottom:clamp(18px,3vw,28px);
+  animation:fadeDown .6s ease both;
+}
+.hero-title{
+  font-family:'Outfit',sans-serif;font-weight:900;
+  font-size:clamp(1.9rem,7vw,5rem);
+  line-height:1.08;letter-spacing:clamp(-1px,-0.04em,-2px);
+  margin-bottom:clamp(12px,2vw,18px);
+  animation:fadeDown .7s .08s ease both;
+}
+.grad{
+  background:linear-gradient(270deg,#7c8cff,#c084fc,#ff7eb3,#fb923c,#4dd9c0,#7c8cff);
+  background-size:500% 500%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:fluidFlow 5s ease infinite;
+}
+.hero-sub{
+  font-size:clamp(.88rem,2vw,1.1rem);color:var(--muted);
+  max-width:min(500px,90vw);line-height:1.75;
+  margin-bottom:clamp(28px,4vw,40px);
+  animation:fadeDown .7s .16s ease both;
+}
+
+/* ── UPLOAD WRAPPER ── */
+.upload-wrapper{
+  width:100%;max-width:min(600px,92vw);
+  animation:fadeUp .8s .26s ease both;
+}
+
+/* ── DROP ZONE ── */
+.drop-zone{
+  background:var(--card);border:2px dashed var(--border);
+  border-radius:var(--r);
+  padding:clamp(28px,5vw,48px) clamp(16px,4vw,32px);
+  cursor:pointer;transition:all .3s;position:relative;overflow:hidden;
+}
+.drop-zone::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(124,140,255,.05),rgba(77,217,192,.04));
+  opacity:0;transition:opacity .3s;
+}
+.drop-zone:hover::before,.drop-zone.drag::before{opacity:1}
+.drop-zone:hover,.drop-zone.drag{
+  border-color:var(--accent);
+  box-shadow:0 0 0 4px rgba(124,140,255,.13);
+  transform:translateY(-2px);
+}
+.dz-icon{
+  width:clamp(56px,10vw,72px);height:clamp(56px,10vw,72px);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(124,140,255,.18),rgba(77,217,192,.12));
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto clamp(12px,2vw,16px);
+  animation:pulse-glow 2.5s ease infinite;
+}
+.dz-icon svg{width:clamp(26px,5vw,34px);height:clamp(26px,5vw,34px)}
+.dz-title{
+  font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:clamp(.95rem,2vw,1.1rem);margin-bottom:6px;
+}
+.dz-sub{color:var(--muted);font-size:clamp(.78rem,1.5vw,.87rem);line-height:1.65}
+.fmt-row{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px}
+.fmt{
+  padding:3px 9px;border-radius:6px;
+  background:var(--surface);border:1px solid var(--border);
+  font-size:clamp(.65rem,1.2vw,.72rem);font-weight:700;
+  color:var(--muted);font-family:'Outfit',sans-serif;
+}
+.fmt.hi{background:rgba(124,140,255,.13);border-color:var(--accent);color:var(--accent)}
+
+/* ── FILE LIST ── */
+.file-list{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+.file-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:11px;padding:10px 13px;
+  transition:border-color .3s;
+}
+.file-row.done {border-color:var(--accent3)}
+.file-row.error{border-color:var(--accent2)}
+.fr-icon{
+  width:36px;height:36px;border-radius:8px;
+  background:rgba(124,140,255,.13);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.fr-icon svg{width:18px;height:18px}
+.fr-info{flex:1;min-width:0}
+.fr-name{
+  font-weight:600;font-size:clamp(.78rem,1.8vw,.86rem);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.fr-size{color:var(--muted);font-size:.72rem;margin-top:1px}
+.fr-bar-wrap{height:4px;border-radius:99px;background:var(--border);margin-top:5px;overflow:hidden}
+.fr-bar{height:100%;border-radius:99px;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent3));transition:width .4s ease}
+.fr-status{font-size:.7rem;margin-top:3px;color:var(--muted)}
+.fr-status.ok {color:var(--accent3);font-weight:600}
+.fr-status.err{color:var(--accent2);font-weight:600}
+.fr-remove{
+  background:none;border:none;color:var(--muted);
+  padding:4px;border-radius:6px;transition:color .2s;flex-shrink:0;
+  display:flex;align-items:center;
+}
+.fr-remove:hover{color:var(--accent2)}
+.fr-remove svg{width:17px;height:17px}
+
+/* ── ACTION ROW ── */
+.action-row{
+  display:flex;gap:9px;margin-top:12px;
+  flex-wrap:wrap;
+}
+.add-btn{
+  flex:0 0 auto;
+  padding:12px 18px;border-radius:11px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font-family:'Outfit',sans-serif;
+  font-weight:600;font-size:clamp(.82rem,1.8vw,.92rem);
+  transition:all .25s;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.add-btn svg{width:17px;height:17px}
+.convert-btn{
+  flex:1;min-width:140px;
+  padding:12px 18px;border-radius:11px;
+  background:linear-gradient(135deg,var(--accent),#9ba8ff);
+  border:none;color:#fff;font-family:'Outfit',sans-serif;
+  font-weight:700;font-size:clamp(.88rem,2vw,.97rem);
+  transition:all .25s;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.convert-btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(124,140,255,.38)}
+.convert-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.convert-btn svg{width:18px;height:18px}
+
+/* ── OVERALL PROGRESS ── */
+.overall-prog{
+  display:none;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px;margin-top:12px;
+}
+.overall-prog.show{display:block;animation:fadeUp .4s ease both}
+.op-label{
+  font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:clamp(.84rem,1.8vw,.92rem);
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;
+}
+.op-pct{color:var(--accent)}
+.op-track{width:100%;height:9px;border-radius:99px;background:var(--border);overflow:hidden}
+.op-fill{
+  height:100%;border-radius:99px;width:0%;
+  background:linear-gradient(90deg,var(--accent),var(--accent3));
+  transition:width .5s ease;
+}
+.op-sub{color:var(--muted);font-size:.78rem;margin-top:7px}
+
+/* ── DOWNLOAD PANEL ── */
+.dl-panel{
+  display:none;
+  background:var(--card);border:1px solid var(--accent3);
+  border-radius:var(--r);padding:clamp(20px,4vw,32px);
+  margin-top:12px;text-align:center;
+}
+.dl-panel.show{display:block;animation:fadeUp .5s ease both}
+.dl-icon{
+  width:clamp(52px,10vw,68px);height:clamp(52px,10vw,68px);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(77,217,192,.2),rgba(124,140,255,.15));
+  display:flex;align-items:center;justify-content:center;margin:0 auto 14px;
+}
+.dl-icon svg{width:clamp(26px,5vw,34px);height:clamp(26px,5vw,34px)}
+.dl-title{font-family:'Outfit',sans-serif;font-weight:800;font-size:clamp(1rem,2.5vw,1.2rem);margin-bottom:5px}
+.dl-sub{color:var(--muted);font-size:clamp(.78rem,1.6vw,.86rem);margin-bottom:16px;line-height:1.6}
+.dl-meta{display:flex;gap:8px;justify-content:center;margin-bottom:18px;flex-wrap:wrap}
+.dl-chip{
+  padding:3px 12px;border-radius:99px;
+  background:var(--surface);border:1px solid var(--border);
+  font-size:clamp(.68rem,1.4vw,.76rem);font-weight:600;
+  color:var(--muted);font-family:'Outfit',sans-serif;
+}
+.dl-chip.green{border-color:var(--accent3);color:var(--accent3);background:rgba(77,217,192,.08)}
+.dl-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:clamp(10px,2vw,13px) clamp(22px,4vw,34px);
+  border-radius:11px;
+  background:linear-gradient(135deg,var(--accent3),#38c4ae);
+  border:none;color:#0d1130;
+  font-family:'Outfit',sans-serif;font-weight:800;
+  font-size:clamp(.84rem,2vw,.95rem);
+  transition:all .25s;
+}
+.dl-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(77,217,192,.38);color:#0d1130}
+.dl-btn svg{width:18px;height:18px}
+.again-btn{
+  display:block;margin-top:10px;background:none;border:none;
+  color:var(--muted);font-size:.82rem;
+  text-decoration:underline;transition:color .2s;
+}
+.again-btn:hover{color:var(--accent)}
+
+/* ── STATS ── */
+.stats-row{
+  display:flex;gap:clamp(20px,5vw,44px);
+  justify-content:center;margin-top:clamp(32px,5vw,48px);
+  flex-wrap:wrap;
+  animation:fadeUp .8s .4s ease both;
+}
+.stat{text-align:center}
+.stat-num{
+  font-family:'Outfit',sans-serif;font-weight:900;
+  font-size:clamp(1.3rem,3vw,1.6rem);
+  background:linear-gradient(270deg,#7c8cff,#c084fc,#ff7eb3,#fb923c,#4dd9c0,#7c8cff);
+  background-size:500% 500%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:fluidSlow 6s ease infinite;
+}
+.stat-label{font-size:clamp(.7rem,1.5vw,.78rem);color:var(--muted);margin-top:2px}
+
+/* ── DIVIDER ── */
+.divider{
+  max-width:1100px;margin:0 auto;height:1px;
+  background:linear-gradient(90deg,transparent,var(--border),transparent);
+}
+
+/* ── SECTION ── */
+.section{
+  max-width:1100px;margin:0 auto;
+  padding:clamp(56px,8vw,90px) clamp(16px,5vw,32px);
+  position:relative;z-index:1;
+}
+.sec-label{
+  font-family:'Outfit',sans-serif;
+  font-size:clamp(.65rem,1.2vw,.73rem);font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;
+  background:linear-gradient(270deg,#a78bfa,#7c8cff,#4dd9c0,#ff7eb3,#fbbf24,#a78bfa);
+  background-size:500% 500%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:fluidSlow 7s ease infinite;
+}
+.sec-title{
+  font-family:'Outfit',sans-serif;font-weight:800;
+  font-size:clamp(1.5rem,4vw,2.6rem);
+  letter-spacing:-1px;line-height:1.15;margin-bottom:12px;
+}
+.sec-sub{
+  color:var(--muted);font-size:clamp(.88rem,1.8vw,.96rem);
+  max-width:min(460px,100%);line-height:1.75;margin-bottom:clamp(32px,5vw,52px);
+}
+
+/* ── FEATURES GRID ── */
+.feat-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));
+  gap:clamp(12px,2vw,18px);
+}
+.feat-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:clamp(20px,3vw,30px) clamp(16px,3vw,26px);
+  transition:all .3s;position:relative;overflow:hidden;
+}
+.feat-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent),var(--accent3));
+  opacity:0;transition:opacity .3s;
+}
+.feat-card:hover::after{opacity:1}
+.feat-card:hover{border-color:rgba(124,140,255,.4);transform:translateY(-4px);box-shadow:var(--shadow)}
+.feat-emoji{font-size:clamp(1.4rem,3vw,1.7rem);margin-bottom:12px}
+.feat-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:clamp(.9rem,2vw,1rem);margin-bottom:6px}
+.feat-desc{color:var(--muted);font-size:clamp(.8rem,1.6vw,.88rem);line-height:1.65}
+
+/* ── STEPS ── */
+.steps-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));
+  gap:0;position:relative;
+}
+.steps-grid::before{
+  content:'';position:absolute;top:29px;left:14%;right:14%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--border),var(--border),transparent);
+}
+.step{text-align:center;padding:0 clamp(10px,2vw,18px) clamp(24px,4vw,36px);position:relative;z-index:1}
+.step-num{
+  width:58px;height:58px;border-radius:50%;
+  background:var(--card);border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto clamp(12px,2vw,18px);
+  font-family:'Outfit',sans-serif;font-weight:800;
+  font-size:clamp(1rem,2.5vw,1.1rem);color:var(--accent);
+  transition:all .3s;
+}
+.step:hover .step-num{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(1.1)}
+.step-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:clamp(.88rem,2vw,.97rem);margin-bottom:6px}
+.step-desc{color:var(--muted);font-size:clamp(.78rem,1.5vw,.86rem);line-height:1.65}
+
+/* ── CTA ── */
+.cta-wrap{
+  max-width:min(660px,92vw);margin:0 auto clamp(56px,8vw,88px);
+  padding:0 clamp(16px,4vw,24px);text-align:center;position:relative;z-index:1;
+}
+.cta-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:22px;
+  padding:clamp(36px,6vw,60px) clamp(22px,5vw,44px);
+  position:relative;overflow:hidden;
+}
+.cta-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(124,140,255,.11),transparent 70%);
+}
+.cta-card>*{position:relative;z-index:1}
+.cta-title{
+  font-family:'Outfit',sans-serif;font-weight:800;
+  font-size:clamp(1.4rem,4vw,2rem);letter-spacing:-.8px;margin-bottom:12px;
+}
+.cta-sub{color:var(--muted);margin-bottom:24px;line-height:1.75;font-size:clamp(.88rem,1.8vw,.97rem)}
+.cta-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:clamp(11px,2vw,13px) clamp(24px,4vw,34px);
+  border-radius:11px;
+  background:linear-gradient(135deg,var(--accent),#9ba8ff);
+  color:#fff;font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:clamp(.84rem,2vw,.95rem);border:none;transition:all .25s;
+}
+.cta-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(124,140,255,.38);color:#fff}
+.cta-btn svg{width:16px;height:16px}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border);
+  padding:clamp(20px,3vw,28px) clamp(16px,4vw,24px);
+  text-align:center;color:var(--muted);
+  font-size:clamp(.75rem,1.5vw,.82rem);
+  position:relative;z-index:1;
+}
+.brand{
+  background:linear-gradient(270deg,#a78bfa,#7c8cff,#4dd9c0,#ff7eb3,#fbbf24,#a78bfa);
+  background-size:400% 400%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  font-weight:700;animation:fluidSlow 7s ease infinite;
+}
+
+/* ── SCROLL TOP ── */
+.scroll-top{
+  position:fixed;
+  bottom:clamp(16px,3vw,24px);right:clamp(16px,3vw,24px);
+  width:40px;height:40px;border-radius:11px;
+  background:var(--accent);color:#fff;border:none;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .3s;opacity:0;transform:translateY(20px);z-index:99;
+}
+.scroll-top.show{opacity:1;transform:translateY(0)}
+.scroll-top:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(124,140,255,.4)}
+.scroll-top svg{width:17px;height:17px}
+
+/* ── REVEAL ── */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s,transform .7s}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ── KEYFRAMES ── */
+/* ── CHATBOT ── */
+.chat-bubble{
+  position:fixed;bottom:24px;left:24px;z-index:300;
+  height:48px;
+  padding:0 16px 0 12px;
+  border-radius:99px;
+  background:linear-gradient(135deg,var(--accent),var(--accent3));
+  border:none;cursor:pointer;
+  display:flex;align-items:center;gap:8px;
+  box-shadow:0 4px 20px rgba(124,140,255,.4);
+  transition:all .3s;
+  font-family:'Outfit',sans-serif;
+  font-weight:700;font-size:.88rem;
+  color:#fff;white-space:nowrap;
+}
+.chat-bubble:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(124,140,255,.55)}
+.chat-bubble .chat-badge{
+  position:absolute;top:-2px;right:-2px;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--accent2);border:2px solid var(--bg);
+  display:none;
+}
+.chat-bubble .chat-badge.show{display:block}
+
+.chat-window{
+  position:fixed;bottom:88px;left:24px;z-index:300;
+  width:min(360px,calc(100vw - 32px));
+  height:min(520px,calc(100vh - 120px));
+  background:var(--card);border:1px solid var(--border);
+  border-radius:20px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  opacity:0;transform:translateY(20px) scale(.95);
+  pointer-events:none;
+  transition:all .3s cubic-bezier(.34,1.56,.64,1);
+}
+.chat-window.open{
+  opacity:1;transform:translateY(0) scale(1);
+  pointer-events:all;
+}
+.chat-head{
+  padding:14px 16px;
+  background:linear-gradient(135deg,var(--accent),var(--accent3));
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.chat-head-info{flex:1}
+.chat-head-name{
+  font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:.92rem;color:#fff;
+}
+.chat-head-status{font-size:.72rem;color:rgba(255,255,255,.8)}
+.chat-close{
+  background:none;border:none;color:#fff;
+  cursor:pointer;padding:4px;border-radius:6px;
+  opacity:.8;transition:opacity .2s;
+}
+.chat-close:hover{opacity:1}
+.chat-close svg{width:18px;height:18px;display:block}
+
+.chat-messages{
+  flex:1;overflow-y:auto;
+  padding:14px;
+  display:flex;flex-direction:column;gap:10px;
+  scroll-behavior:smooth;
+}
+.chat-messages::-webkit-scrollbar{width:4px}
+.chat-messages::-webkit-scrollbar-track{background:transparent}
+.chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+.msg{
+  display:flex;gap:8px;align-items:flex-end;
+  animation:fadeUp .3s ease;
+}
+.msg.user{flex-direction:row-reverse}
+.msg-avatar{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:.75rem;font-weight:700;
+}
+.msg.bot .msg-avatar{
+  background:linear-gradient(135deg,var(--accent),var(--accent3));
+  color:#fff;
+}
+.msg.user .msg-avatar{
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--muted);
+}
+.msg-text{
+  max-width:78%;padding:9px 13px;border-radius:14px;
+  font-size:.84rem;line-height:1.55;
+}
+.msg.bot .msg-text{
+  background:var(--surface);border:1px solid var(--border);
+  border-bottom-left-radius:4px;color:var(--text);
+}
+.msg.user .msg-text{
+  background:linear-gradient(135deg,var(--accent),#9ba8ff);
+  color:#fff;border-bottom-right-radius:4px;
+}
+.msg-typing{
+  display:flex;gap:4px;align-items:center;
+  padding:10px 14px;
+}
+.msg-typing span{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--muted);
+  animation:typingDot 1.2s ease infinite;
+}
+.msg-typing span:nth-child(2){animation-delay:.2s}
+.msg-typing span:nth-child(3){animation-delay:.4s}
+@keyframes typingDot{
+  0%,60%,100%{transform:translateY(0);opacity:.4}
+  30%{transform:translateY(-6px);opacity:1}
+}
+
+.chat-input-row{
+  padding:10px 12px;
+  border-top:1px solid var(--border);
+  display:flex;gap:8px;align-items:flex-end;
+  flex-shrink:0;background:var(--card);
+}
+.chat-input{
+  flex:1;background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;padding:9px 13px;
+  color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:.84rem;resize:none;
+  max-height:100px;min-height:38px;
+  outline:none;transition:border-color .2s;
+  line-height:1.4;
+}
+.chat-input:focus{border-color:var(--accent)}
+.chat-input::placeholder{color:var(--muted)}
+.chat-send{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),#9ba8ff);
+  border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.chat-send:hover{transform:scale(1.08);box-shadow:0 4px 14px rgba(124,140,255,.4)}
+.chat-send:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.chat-send svg{width:16px;height:16px;color:#fff}
+
+@keyframes fadeUp  {from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)}}
+@keyframes pulse-glow{
+  0%,100%{box-shadow:0 0 0 0 rgba(124,140,255,.3)}
+  50%    {box-shadow:0 0 0 10px rgba(124,140,255,0)}
+}
+@keyframes fluidFlow{
+  0%  {background-position:0% 50%}
+  33% {background-position:60% 80%}
+  66% {background-position:100% 20%}
+  100%{background-position:0% 50%}
+}
+@keyframes fluidSlow{
+  0%  {background-position:0% 50%}
+  50% {background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+
+/* ── TABLET TWEAKS (481–768) ── */
+@media(min-width:481px) and (max-width:768px){
+  .feat-grid{grid-template-columns:repeat(2,1fr)}
+  .steps-grid{grid-template-columns:repeat(3,1fr)}
+  .action-row{flex-wrap:nowrap}
+}
+
+/* ── MOBILE (≤480) ── */
+@media(max-width:480px){
+  :root{--r:13px}
+  .steps-grid::before{display:none}
+  .steps-grid{grid-template-columns:1fr;gap:0}
+  .step{padding:0 8px 20px}
+  .feat-grid{grid-template-columns:1fr}
+  .action-row{flex-direction:column}
+  .add-btn,.convert-btn{width:100%;justify-content:center;flex:none}
+  .dl-meta{gap:6px}
+  .hero-title{letter-spacing:-1px}
+  .cta-card{padding:28px 18px}
+}
+
+/* ── LARGE SCREENS (≥1200) ── */
+@media(min-width:1200px){
+  .feat-grid{grid-template-columns:repeat(3,1fr)}
+  .steps-grid{grid-template-columns:repeat(3,1fr)}
+}
+
+/* ── TOUCH DEVICES: remove hover transforms ── */
+@media(hover:none){
+  .feat-card:hover,.drop-zone:hover,.convert-btn:hover,
+  .dl-btn:hover,.cta-btn:hover,.step:hover .step-num{
+    transform:none;box-shadow:none;
+  }
+}
+</style>
+
+<style>
+/* ── NEW FEATURE STYLES ── */
+.fr-name-row{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+.fr-ext-badge{font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:4px;font-family:'Outfit',sans-serif;flex-shrink:0;white-space:nowrap}
+.fr-ext-badge.native{background:rgba(77,217,192,.15);color:var(--accent3);border:1px solid rgba(77,217,192,.3)}
+.fr-ext-badge.redir{background:rgba(255,126,179,.12);color:var(--accent2);border:1px solid rgba(255,126,179,.3)}
+.fr-btns{display:flex;gap:5px;flex-shrink:0;align-items:center}
+.fr-ab{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;flex-shrink:0}
+.fr-ab:hover{border-color:var(--accent);color:var(--accent)}
+.fr-ab.eye:hover{border-color:var(--accent3);color:var(--accent3);background:rgba(77,217,192,.08)}
+.fr-ab.dl:hover{border-color:var(--accent3);color:var(--accent3)}
+/* Preview modal */
+.pv-overlay{display:none;position:fixed;inset:0;z-index:998;background:rgba(5,9,20,.93);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:16px}
+.pv-overlay.show{display:flex;animation:pvFadeIn .3s ease}
+@keyframes pvFadeIn{from{opacity:0}to{opacity:1}}
+.pv-box{background:var(--card);border:1px solid var(--border);border-radius:18px;width:min(680px,100%);overflow:hidden;box-shadow:0 40px 100px rgba(0,0,0,.7);animation:pvUp .35s ease}
+@keyframes pvUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.pv-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.pv-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%}
+.pv-close{background:none;border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.pv-close:hover{border-color:var(--accent2);color:var(--accent2)}
+#pvCanvas{width:100%;height:360px;display:block;cursor:grab;touch-action:none;background:radial-gradient(ellipse at 40% 40%,#0d1a2e,#050b18)}
+#pvCanvas:active{cursor:grabbing}
+.pv-foot{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.pv-hint{font-size:.72rem;color:var(--muted)}
+.pv-info{font-family:'Outfit',sans-serif;font-size:.76rem;color:var(--accent3);font-weight:600}
+/* Redirect modal */
+.rd-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(5,9,20,.9);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:16px}
+.rd-overlay.show{display:flex;animation:pvFadeIn .3s ease}
+.rd-box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:clamp(22px,5vw,38px);max-width:480px;width:100%;text-align:center;box-shadow:0 40px 80px rgba(0,0,0,.6);animation:pvUp .35s ease}
+.rd-box h3{font-family:'Outfit',sans-serif;font-weight:800;font-size:clamp(1rem,3vw,1.3rem);margin-bottom:8px}
+.rd-box p{color:var(--muted);font-size:.86rem;line-height:1.7;margin-bottom:16px}
+.rd-ext{display:inline-block;font-family:'Outfit',sans-serif;font-weight:900;font-size:1rem;color:var(--accent2);background:rgba(255,126,179,.1);border:1px solid rgba(255,126,179,.3);padding:3px 12px;border-radius:6px;margin-bottom:12px}
+.rd-sites{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.rd-site{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 15px;color:var(--text);font-family:'Outfit',sans-serif;font-weight:600;font-size:.85rem;transition:all .25s;text-decoration:none}
+.rd-site:hover{border-color:var(--accent);color:var(--accent);transform:translateX(3px)}
+.rd-site span{font-size:.72rem;color:var(--muted)}
+.rd-close{background:none;border:1px solid var(--border);color:var(--muted);padding:8px 22px;border-radius:9px;font-family:'Outfit',sans-serif;font-weight:600;font-size:.83rem;transition:all .2s;cursor:pointer}
+.rd-close:hover{border-color:var(--accent2);color:var(--accent2)}
+/* Toast */
+.toast-host{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:7px;align-items:center;pointer-events:none}
+.toast{padding:9px 18px;border-radius:9px;font-size:.8rem;font-weight:600;font-family:'Outfit',sans-serif;animation:toastIn .3s ease;white-space:nowrap;background:var(--card);border:1px solid var(--border);color:var(--text);box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.toast.ok{border-color:var(--accent3);color:var(--accent3)}
+.toast.err{border-color:var(--accent2);color:var(--accent2)}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-inner">
+    <div class="logo">&#9651; ForgeConvert</div>
+    <div class="nav-right">
+      <span class="theme-label" id="themeLabel">Dark</span>
+      <button class="theme-icon-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+        <!-- Moon (dark mode) -->
+        <svg id="moonSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <!-- Sun (light mode) -->
+        <svg id="sunSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero" id="home">
+  <div class="badge">&#11088; Real Browser Conversion &mdash; OBJ · GLB · GLTF</div>
+  <h1 class="hero-title">Convert 3D Files<br>to <span class="grad">STL Format</span></h1>
+  <p class="hero-sub">Upload OBJ, GLB or GLTF files — converted right in your browser. Preview in 3D, download individually or as a ZIP.</p>
+
+  <div class="upload-wrapper">
+
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)"
+         onclick="document.getElementById('fileInput').click()">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 16 12 12 8 16"/>
+          <line x1="12" y1="12" x2="12" y2="21"/>
+          <path d="M20.4 18.4A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+        </svg>
+      </div>
+      <div class="dz-title">Drop your 3D files here</div>
+      <p class="dz-sub">OBJ · GLB · GLTF &rarr; converted here &nbsp;|&nbsp; FBX · STEP · IGES &rarr; redirected to best free tool</p>
+      <div class="fmt-row">
+        <span class="fmt hi">.OBJ</span>
+        <span class="fmt hi">.GLB</span>
+        <span class="fmt hi">.GLTF</span>
+        <span class="fmt">.FBX</span>
+        <span class="fmt">.STEP</span>
+        <span class="fmt">.IGES</span>
+        <span class="fmt">.SLDPRT</span>
+        <span class="fmt hi">&#8594;&nbsp;.STL</span>
+      </div>
+      <input type="file" id="fileInput" hidden multiple
+             accept=".obj,.gltf,.glb,.fbx,.step,.stp,.iges,.igs,.sldprt,.sldasm,.3ds,.dxf"
+             onchange="onFilesSelect(this.files)"/>
+    </div>
+
+    <!-- File List -->
+    <div class="file-list" id="fileList"></div>
+
+    <!-- Actions -->
+    <div class="action-row" id="actionRow" style="display:none">
+      <button class="add-btn" onclick="document.getElementById('fileInput').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="16"/>
+          <line x1="8"  y1="12" x2="16" y2="12"/>
+        </svg>
+        Add More
+      </button>
+      <button class="convert-btn" id="convertBtn" onclick="startConvert()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Convert All to STL
+      </button>
+    </div>
+
+    <!-- Overall Progress -->
+    <div class="overall-prog" id="overallProg">
+      <div class="op-label">
+        <span id="opLabel">Converting&hellip;</span>
+        <span class="op-pct" id="opPct">0%</span>
+      </div>
+      <div class="op-track"><div class="op-fill" id="opFill"></div></div>
+      <div class="op-sub" id="opSub">Preparing&hellip;</div>
+    </div>
+
+    <!-- Download Panel -->
+    <div class="dl-panel" id="dlPanel">
+      <div class="dl-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
+      <div class="dl-title">All Files Converted!</div>
+      <div class="dl-sub" id="dlSub">Your STL files are packed and ready.</div>
+      <div class="dl-meta">
+        <span class="dl-chip green" id="dlCount">0 STL Files</span>
+        <span class="dl-chip" id="dlZipSize">—</span>
+        <span class="dl-chip">ZIP Archive</span>
+      </div>
+      <button class="dl-btn" onclick="doDownload()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download ZIP
+      </button>
+      <button class="again-btn" onclick="resetAll()">&#8635; Convert more files</button>
+    </div>
+
+  </div><!-- /upload-wrapper -->
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">6+</div><div class="stat-label">Formats Supported</div></div>
+    <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Free to Use</div></div>
+    <div class="stat"><div class="stat-num">&lt;30s</div><div class="stat-label">Avg. Convert Time</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── FEATURES ── -->
+<section class="section" id="features">
+  <div class="reveal">
+    <div class="sec-label">Why ForgeConvert</div>
+    <h2 class="sec-title">Built for Engineers,<br>Designers &amp; Makers</h2>
+    <p class="sec-sub">Everything you need to convert, download, and print your 3D models — fast and free.</p>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card reveal" style="transition-delay:.05s">
+      <div class="feat-emoji">&#128640;</div>
+      <div class="feat-title">Lightning Fast</div>
+      <p class="feat-desc">Optimised engine processes files in under 30 seconds, even for complex assemblies.</p>
+    </div>
+    <div class="feat-card reveal" style="transition-delay:.1s">
+      <div class="feat-emoji">&#128274;</div>
+      <div class="feat-title">Privacy First</div>
+      <p class="feat-desc">Files are deleted after download. We never store or share your designs.</p>
+    </div>
+    <div class="feat-card reveal" style="transition-delay:.15s">
+      <div class="feat-emoji">&#128230;</div>
+      <div class="feat-title">Bulk Conversion</div>
+      <p class="feat-desc">Upload multiple files at once. All STLs are packed into a single ZIP download.</p>
+    </div>
+    <div class="feat-card reveal" style="transition-delay:.2s">
+      <div class="feat-emoji">&#127919;</div>
+      <div class="feat-title">High Precision</div>
+      <p class="feat-desc">Fine mode preserves every surface detail for professional-grade 3D printing.</p>
+    </div>
+    <div class="feat-card reveal" style="transition-delay:.25s">
+      <div class="feat-emoji">&#128241;</div>
+      <div class="feat-title">Works Everywhere</div>
+      <p class="feat-desc">Fully responsive on mobile, tablet, and desktop. Convert from any browser.</p>
+    </div>
+    <div class="feat-card reveal" style="transition-delay:.3s">
+      <div class="feat-emoji">&#9889;</div>
+      <div class="feat-title">No Install Needed</div>
+      <p class="feat-desc">100% browser-based. No plugins, no software, no account required.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── HOW IT WORKS ── -->
+<section class="section" id="how">
+  <div class="reveal" style="text-align:center">
+    <div class="sec-label">How It Works</div>
+    <h2 class="sec-title">3 Simple Steps</h2>
+    <p class="sec-sub" style="margin:0 auto clamp(32px,5vw,48px)">No learning curve. Upload, convert, download ZIP.</p>
+  </div>
+  <div class="steps-grid reveal">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-title">Upload Files</div>
+      <p class="step-desc">Drag &amp; drop or browse multiple 3D files at once. Up to 500&nbsp;MB each.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-title">Convert All</div>
+      <p class="step-desc">Click Convert — all files processed in sequence with live progress per file.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-title">Download ZIP</div>
+      <p class="step-desc">All STL files bundled into one ZIP. Import instantly into any slicer or tool.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── CTA ── -->
+<section class="cta-wrap" style="padding-top:clamp(48px,7vw,88px)" id="start">
+  <div class="cta-card reveal">
+    <div class="sec-label" style="text-align:center">Ready to Convert?</div>
+    <h2 class="cta-title">Start Converting<br>Your 3D Files Now</h2>
+    <p class="cta-sub">Free, fast, no signup needed. Upload multiple files, get one ZIP.</p>
+    <a href="#home" class="cta-btn" onclick="document.getElementById('home').scrollIntoView({behavior:'smooth'});return false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 16 12 12 8 16"/>
+        <line x1="12" y1="12" x2="12" y2="21"/>
+        <path d="M20.4 18.4A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+      </svg>
+      Upload Files
+    </a>
+  </div>
+</section>
+
+<!-- ── CHATBOT ── -->
+<button class="chat-bubble" id="chatBubble" onclick="toggleChat()" title="Ask ForgeBot AI">
+  <!-- Claude / Anthropic icon -->
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M13.827 3.52L17.01 9.56L20.138 3.52H23L17.01 14.653L11.02 3.52H13.827Z" fill="white"/>
+    <path d="M6.826 3.52L13.041 14.936H10.234L6.826 8.896L3.418 14.936H0.611L6.826 3.52Z" fill="white" opacity="0.85"/>
+    <path d="M5.5 16.5L7.5 20.5H4.5L2.5 16.5H5.5Z" fill="white" opacity="0.7"/>
+    <path d="M18.5 16.5L20.5 20.5H17.5L15.5 16.5H18.5Z" fill="white" opacity="0.7"/>
+  </svg>
+  AI
+  <div class="chat-badge" id="chatBadge"></div>
+</button>
+
+<div class="chat-window" id="chatWindow">
+  <div class="chat-head">
+    <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" width="18" height="18">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+    </div>
+    <div class="chat-head-info">
+      <div class="chat-head-name">ForgeBot</div>
+      <div class="chat-head-status">&#x2022; CAD &amp; 3D Printing Expert</div>
+    </div>
+    <button class="chat-close" onclick="toggleChat()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="chat-messages" id="chatMessages">
+    <!-- Welcome message -->
+    <div class="msg bot">
+      <div class="msg-avatar">F</div>
+      <div class="msg-text">Hi! I'm ForgeBot 👋 I can help you with CAD file conversion, 3D printing tips, and STL troubleshooting. What's your question?</div>
+    </div>
+  </div>
+
+  <div class="chat-input-row">
+    <textarea class="chat-input" id="chatInput" placeholder="Ask about CAD, STL, 3D printing..." rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
+      oninput="autoResize(this)"></textarea>
+    <button class="chat-send" id="chatSend" onclick="sendChat()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<footer>
+  <p>Built with &#10084;&#65039; for the maker community &nbsp;&middot;&nbsp; <span class="brand">ForgeConvert</span></p>
+  <p style="margin-top:4px">&#169; 2026 ForgeConvert &middot; All rights reserved</p>
+</footer>
+
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+    <polyline points="18 15 12 9 6 15"/>
+  </svg>
+</button>
+
+<!-- Toast host -->
+<div class="toast-host" id="toastHost"></div>
+
+<!-- 3D Preview Modal -->
+<div class="pv-overlay" id="pvOverlay" onclick="if(event.target===this)closePV()">
+  <div class="pv-box">
+    <div class="pv-head">
+      <div class="pv-title" id="pvTitle">3D Preview</div>
+      <button class="pv-close" onclick="closePV()">✕</button>
+    </div>
+    <canvas id="pvCanvas"></canvas>
+    <div class="pv-foot">
+      <div class="pv-hint">🖱 Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
+      <div class="pv-info" id="pvInfo"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Redirect Modal -->
+<div class="rd-overlay" id="rdOverlay" onclick="if(event.target===this)closeRD()">
+  <div class="rd-box">
+    <div style="font-size:1.8rem;margin-bottom:8px">🔀</div>
+    <h3 id="rdTitle">Can't Convert This Format</h3>
+    <div class="rd-ext" id="rdExt">.FBX</div>
+    <p id="rdMsg"><strong id="rdFile"></strong> needs special CAD software to convert.<br>These <strong>free sites</strong> do it instantly:</p>
+    <div class="rd-sites" id="rdSites"></div>
+    <button class="rd-close" onclick="closeRD()">✕ Close</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* ══════════════════════════════════════════
+   FORGECONVERT — Full Upgraded Script
+   Features: Real OBJ/GLB/GLTF conversion,
+   3D Preview, Individual DL, Redirect modal
+══════════════════════════════════════════ */
+
+/* ── THEME ── */
+let dark=true;
+function toggleTheme(){
+  dark=!dark;
+  document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+  document.getElementById('themeLabel').textContent=dark?'Dark':'Light';
+  document.getElementById('moonSvg').style.display=dark?'block':'none';
+  document.getElementById('sunSvg').style.display=dark?'none':'block';
+}
+
+/* ── STATE ── */
+let files=[];
+const NATIVE=['obj','gltf','glb'];
+const BACKEND=['step','stp','iges','igs','brep','stl'];
+const UNSUPPORTED=['sldprt','sldasm','fbx','3ds','dxf'];
+const API_URL='';
+const REDIRECT_MAP={
+  fbx:{name:'imagetostl.com',url:'https://imagetostl.com/convert/file/fbx/to/stl',desc:'Best for FBX · Free · Fast'},
+  step:{name:'3dconverter.net',url:'https://3dconverter.net',desc:'STEP/STP · Browser-based · Free'},
+  stp:{name:'3dconverter.net',url:'https://3dconverter.net',desc:'STEP/STP · Browser-based · Free'},
+  iges:{name:'3dconverter.net',url:'https://3dconverter.net',desc:'IGES/IGS · Browser-based · Free'},
+  igs:{name:'3dconverter.net',url:'https://3dconverter.net',desc:'IGES/IGS · Browser-based · Free'},
+  sldprt:{name:'3dencoder.com',url:'https://3dencoder.com',desc:'SolidWorks Parts · Free'},
+  sldasm:{name:'3dencoder.com',url:'https://3dencoder.com',desc:'SolidWorks Assembly · Free'},
+  '3ds':{name:'imagetostl.com',url:'https://imagetostl.com',desc:'3DS Max · Free'},
+  dxf:{name:'convert3d.org',url:'https://convert3d.org',desc:'1000+ Formats · Free'},
+};
+const FALLBACK_SITES=[
+  {name:'convert3d.org',url:'https://convert3d.org',desc:'1000+ formats · Free · Private'},
+  {name:'imagetostl.com',url:'https://imagetostl.com',desc:'Fast online converter · Free'},
+  {name:'3dconverter.net',url:'https://3dconverter.net',desc:'Browser-based · No upload needed'},
+];
+
+function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' KB'}
+function uid(){return Math.random().toString(36).slice(2,9)}
+function ext(f){return f.name.split('.').pop().toLowerCase()}
+
+/* ── TOAST ── */
+function toast(msg,type='ok',ms=2800){
+  const host=document.getElementById('toastHost');
+  const t=document.createElement('div');
+  t.className='toast '+type;t.textContent=msg;
+  host.appendChild(t);
+  setTimeout(()=>t.style.opacity='0',ms-300);
+  setTimeout(()=>t.remove(),ms);
+}
+
+/* ── DRAG & DROP ── */
+function onDragOver(e){e.preventDefault();document.getElementById('dropZone').classList.add('drag')}
+function onDragLeave(e){if(!document.getElementById('dropZone').contains(e.relatedTarget))document.getElementById('dropZone').classList.remove('drag')}
+function onDrop(e){e.preventDefault();document.getElementById('dropZone').classList.remove('drag');addFiles(e.dataTransfer.files)}
+function onFilesSelect(fl){addFiles(fl)}
+
+function addFiles(fl){
+  Array.from(fl).forEach(f=>{
+    if(files.find(x=>x.file.name===f.name&&x.file.size===f.size))return;
+    const id=uid();
+    files.push({file:f,id,stlData:null,triCount:0});
+    renderRow(f,id);
+  });
+  document.getElementById('fileInput').value='';
+  updateUI();
+}
+
+/* ── RENDER FILE ROW ── */
+function renderRow(file,id){
+  const list=document.getElementById('fileList');
+  const div=document.createElement('div');
+  div.className='file-row';div.id='row-'+id;
+  const e=ext(file);
+  const isOk=NATIVE.includes(e)||BACKEND.includes(e);
+  div.innerHTML=`
+    <div class="fr-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+    </div>
+    <div class="fr-info">
+      <div class="fr-name-row">
+        <div class="fr-name">${file.name}</div>
+        <span class="fr-ext-badge ${isOk?'native':'redir'}">${e.toUpperCase()}${isOk?'':' ↗'}</span>
+      </div>
+      <div class="fr-size">${fmtSize(file.size)}</div>
+      <div class="fr-bar-wrap"><div class="fr-bar" id="bar-${id}"></div></div>
+      <div class="fr-status" id="stat-${id}">${isOk?'Ready':'Unsupported — see free tools'}</div>
+    </div>
+    <div class="fr-btns" id="btns-${id}"></div>
+    <button class="fr-remove" onclick="removeFile('${id}')" title="Remove">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+      </svg>
+    </button>`;
+  list.appendChild(div);
+}
+
+function showFileBtns(id){
+  const entry=files.find(f=>f.id===id);
+  if(!entry||!entry.stlData)return;
+  const btns=document.getElementById('btns-'+id);
+  if(!btns)return;
+  btns.innerHTML=`
+    <button class="fr-ab eye" onclick="openPV('${id}')" title="Preview 3D">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+    <button class="fr-ab dl" onclick="dlSingle('${id}')" title="Download STL">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </button>`;
+}
+
+function dlSingle(id){
+  const entry=files.find(f=>f.id===id);
+  if(!entry||!entry.stlData)return;
+  const blob=new Blob([entry.stlData],{type:'application/octet-stream'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const name=entry.file.name.replace(/\.[^.]+$/,'')+'.stl';
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast('⬇ Downloaded '+name);
+}
+
+function removeFile(id){
+  files=files.filter(x=>x.id!==id);
+  const el=document.getElementById('row-'+id);
+  if(el){el.style.opacity='0';el.style.transform='translateX(-10px)';setTimeout(()=>el.remove(),200)}
+  updateUI();
+}
+
+function updateUI(){
+  const has=files.length>0;
+  document.getElementById('actionRow').style.display=has?'flex':'none';
+  document.getElementById('overallProg').classList.remove('show');
+  document.getElementById('dlPanel').classList.remove('show');
+}
+
+/* ══ OBJ → STL ══ */
+function parseOBJ(text){
+  const verts=[];const faces=[];
+  for(const line of text.split('\n')){
+    const p=line.trim().split(/\s+/);
+    if(p[0]==='v')verts.push([+p[1],+p[2],+p[3]]);
+    else if(p[0]==='f'){
+      const idx=p.slice(1).map(x=>+x.split('/')[0]-1);
+      for(let i=1;i<idx.length-1;i++)faces.push([idx[0],idx[i],idx[i+1]]);
+    }
+  }
+  if(!faces.length)throw new Error('No geometry in OBJ file');
+  return {verts,faces};
+}
+
+/* ══ GLB → geometry ══ */
+async function parseGLB(ab){
+  const dv=new DataView(ab);
+  if(dv.getUint32(0,true)!==0x46546C67)throw new Error('Not a valid GLB');
+  const jsonLen=dv.getUint32(12,true);
+  const json=JSON.parse(new TextDecoder().decode(new Uint8Array(ab,20,jsonLen)));
+  const binStart=20+jsonLen+8;
+  const bin=ab.slice(binStart);
+  return extractGLTFGeo(json,bin);
+}
+
+/* ══ GLTF (JSON) → geometry ══ */
+async function parseGLTF(text){
+  const json=JSON.parse(text);
+  let bin=null;
+  if(json.buffers&&json.buffers[0]){
+    const uri=json.buffers[0].uri||'';
+    if(uri.startsWith('data:')){
+      const b64=uri.split(',')[1];
+      const raw=atob(b64);const arr=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+      bin=arr.buffer;
+    }else if(!uri){
+      throw new Error('No embedded buffer. Use GLB format.');
+    }else{
+      throw new Error('External .bin not supported. Export as GLB.');
+    }
+  }
+  return extractGLTFGeo(json,bin);
+}
+
+function extractGLTFGeo(json,bin){
+  const allV=[];const allF=[];let vo=0;
+  for(const mesh of(json.meshes||[])){
+    for(const prim of(mesh.primitives||[])){
+      const pa=json.accessors[prim.attributes.POSITION];
+      const pbv=json.bufferViews[pa.bufferView];
+      const pOff=(pbv.byteOffset||0)+(pa.byteOffset||0);
+      const pos=new Float32Array(bin,pOff,pa.count*3);
+      const lv=[];
+      for(let i=0;i<pa.count;i++)lv.push([pos[i*3],pos[i*3+1],pos[i*3+2]]);
+      if(prim.indices!=null){
+        const ia=json.accessors[prim.indices];
+        const ibv=json.bufferViews[ia.bufferView];
+        const iOff=(ibv.byteOffset||0)+(ia.byteOffset||0);
+        let idx;
+        const ct=ia.componentType;
+        if(ct===5121)idx=new Uint8Array(bin,iOff,ia.count);
+        else if(ct===5123)idx=new Uint16Array(bin,iOff,ia.count);
+        else idx=new Uint32Array(bin,iOff,ia.count);
+        for(let i=0;i<idx.length;i+=3)allF.push([idx[i]+vo,idx[i+1]+vo,idx[i+2]+vo]);
+      }else{
+        for(let i=0;i<lv.length;i+=3)allF.push([i+vo,i+1+vo,i+2+vo]);
+      }
+      allV.push(...lv);vo+=lv.length;
+    }
+  }
+  if(!allF.length)throw new Error('No mesh geometry found');
+  return {verts:allV,faces:allF};
+}
+
+/* ══ Build Binary STL ══ */
+function buildSTL(verts,faces){
+  const buf=new ArrayBuffer(84+faces.length*50);
+  const dv=new DataView(buf);
+  const hdr='ForgeConvert STL';
+  for(let i=0;i<hdr.length;i++)dv.setUint8(i,hdr.charCodeAt(i));
+  dv.setUint32(80,faces.length,true);
+  let off=84;
+  for(const [a,b,c] of faces){
+    const va=verts[a],vb=verts[b],vc=verts[c];
+    if(!va||!vb||!vc){off+=50;continue}
+    const ux=vb[0]-va[0],uy=vb[1]-va[1],uz=vb[2]-va[2];
+    const wx=vc[0]-va[0],wy=vc[1]-va[1],wz=vc[2]-va[2];
+    const nx=uy*wz-uz*wy,ny=uz*wx-ux*wz,nz=ux*wy-uy*wx;
+    const nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+    dv.setFloat32(off,nx/nl,true);dv.setFloat32(off+4,ny/nl,true);dv.setFloat32(off+8,nz/nl,true);off+=12;
+    for(const v of[va,vb,vc]){dv.setFloat32(off,v[0],true);dv.setFloat32(off+4,v[1],true);dv.setFloat32(off+8,v[2],true);off+=12}
+    dv.setUint16(off,0,true);off+=2;
+  }
+  return buf;
+}
+
+async function convertEntry(entry){
+  const e=ext(entry.file);
+  const ab=await entry.file.arrayBuffer();
+  let geo;
+  if(e==='obj'){geo=parseOBJ(new TextDecoder().decode(ab))}
+  else if(e==='glb'){geo=await parseGLB(ab)}
+  else if(e==='gltf'){geo=await parseGLTF(new TextDecoder().decode(ab))}
+  else throw new Error('REDIRECT');
+  const stl=buildSTL(geo.verts,geo.faces);
+  return{stl,triCount:geo.faces.length};
+}
+
+/* ══ MAIN CONVERT ══ */
+async function startConvert(){
+  if(!files.length)return;
+
+  document.getElementById('convertBtn').disabled=true;
+  document.getElementById('overallProg').classList.add('show');
+  document.getElementById('dlPanel').classList.remove('show');
+
+  files.forEach(f=>{
+    const b=document.getElementById('bar-'+f.id);
+    const s=document.getElementById('stat-'+f.id);
+    const r=document.getElementById('row-'+f.id);
+    if(b){b.style.width='0%';b.style.background=''}
+    if(s){s.textContent='Waiting…';s.className='fr-status'}
+    if(r)r.className='file-row';
+    f.stlData=null;f.triCount=0;
+  });
+
+  setOverall(0,'Starting…','0 of '+files.length+' done');
+  let done=0;
+
+  for(let i=0;i<files.length;i++){
+    const entry=files[i];
+    const e=ext(entry.file);
+    const bar=document.getElementById('bar-'+entry.id);
+    const st=document.getElementById('stat-'+entry.id);
+    const row=document.getElementById('row-'+entry.id);
+
+    try{
+      let stlBuf, triCount=0;
+
+      if(NATIVE.includes(e)){
+        // ── Browser-side: OBJ, GLB, GLTF ──
+        if(st){st.textContent='Converting…';st.className='fr-status'}
+        if(bar)bar.style.width='30%';
+        const result=await convertEntry(entry);
+        stlBuf=result.stl;
+        triCount=result.triCount;
+
+      } else if(BACKEND.includes(e)){
+        // ── Backend: STEP, STP, SLDPRT, IGES etc ──
+        if(st){st.textContent='Uploading…';st.className='fr-status'}
+        if(bar)bar.style.width='10%';
+
+        const fd=new FormData();
+        fd.append('file',entry.file);
+
+        if(st)st.textContent='Converting…';
+        if(bar)bar.style.width='40%';
+
+        const resp=await fetch(API_URL+'/convert',{method:'POST',body:fd});
+        if(bar)bar.style.width='80%';
+
+        if(!resp.ok){
+          const err=await resp.json().catch(()=>({error:'Server error'}));
+          throw new Error(err.error||'Conversion failed');
+        }
+
+        const blob=await resp.blob();
+        stlBuf=await blob.arrayBuffer();
+
+        // Count triangles — binary STL: bytes 80-83
+        if(stlBuf.byteLength>84){
+          triCount=new DataView(stlBuf).getUint32(80,true);
+        }
+
+      } else {
+        // ── Unsupported → redirect popup ──
+        if(bar){bar.style.width='100%';bar.style.background='var(--muted)'}
+        if(st){st.textContent='Unsupported — see free tools';st.className='fr-status'}
+        showRD(e,entry.file.name);
+        setOverall(Math.round(((i+1)/files.length)*100),
+          i+1<files.length?'Converting '+(i+2)+' of '+files.length+'…':'All done!',
+          done+' of '+files.length+' converted');
+        continue;
+      }
+
+      // ── Success ──
+      entry.stlData=stlBuf;
+      entry.triCount=triCount;
+      if(bar)bar.style.width='100%';
+      if(row)row.className='file-row done';
+      const triStr=triCount>0?' — '+triCount.toLocaleString()+' triangles':'';
+      if(st){st.textContent='✓ Converted'+triStr+' · '+fmtSize(stlBuf.byteLength);st.className='fr-status ok'}
+      showFileBtns(entry.id);
+      done++;
+      toast('✓ '+entry.file.name+' converted!');
+
+    }catch(err){
+      if(bar){bar.style.width='100%';bar.style.background='var(--accent2)'}
+      if(row)row.className='file-row error';
+      if(st){st.textContent='Could not convert — see free tools below';st.className='fr-status err'}
+      // Show redirect popup with free tool suggestions
+      showRD(ext(entry.file),entry.file.name,true);
+    }
+
+    setOverall(Math.round(((i+1)/files.length)*100),
+      i+1<files.length?'Converting '+(i+2)+' of '+files.length+'…':'All done!',
+      done+' of '+files.length+' converted');
+  }
+  setTimeout(()=>showDLPanel(done),400);
+}
+
+function setOverall(pct,label,sub){
+  document.getElementById('opFill').style.width=pct+'%';
+  document.getElementById('opPct').textContent=pct+'%';
+  document.getElementById('opLabel').textContent=label;
+  document.getElementById('opSub').textContent=sub;
+}
+
+function showDLPanel(done){
+  document.getElementById('overallProg').classList.remove('show');
+  document.getElementById('convertBtn').disabled=false;
+  if(!done)return;
+  const converted=files.filter(f=>f.stlData);
+  const totalBytes=converted.reduce((a,f)=>a+f.stlData.byteLength,0);
+  document.getElementById('dlCount').textContent=done+' STL File'+(done>1?'s':'');
+  document.getElementById('dlZipSize').textContent='~'+fmtSize(totalBytes);
+  document.getElementById('dlSub').textContent=done+' file'+(done>1?'s':'')+' converted. Preview, download individually, or grab the ZIP.';
+  document.getElementById('dlPanel').classList.add('show');
+  toast('✓ '+done+' file'+(done>1?'s':'')+' converted!');
+}
+
+/* ══ ZIP DOWNLOAD ══ */
+async function doDownload(){
+  const converted=files.filter(f=>f.stlData);
+  if(!converted.length){toast('No files converted yet','err');return}
+  const zip=new JSZip();
+  converted.forEach(e=>{zip.file(e.file.name.replace(/\.[^.]+$/,'')+'.stl',e.stlData)});
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='ForgeConvert_STL.zip';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast('⬇ ZIP downloaded!');
+}
+
+/* ══ RESET ══ */
+function resetAll(){
+  files=[];
+  document.getElementById('fileList').innerHTML='';
+  document.getElementById('fileInput').value='';
+  document.getElementById('actionRow').style.display='none';
+  document.getElementById('overallProg').classList.remove('show');
+  document.getElementById('dlPanel').classList.remove('show');
+  document.getElementById('home').scrollIntoView({behavior:'smooth'});
+}
+
+/* ══ 3D PREVIEW (WebGL) ══ */
+let pvGL=null,pvAnim=null,pvEntry=null;
+let pvRot={x:0.4,y:0},pvDrag=false,pvLast={x:0,y:0},pvDist=1;
+
+function openPV(id){
+  const entry=files.find(f=>f.id===id);
+  if(!entry||!entry.stlData)return;
+  pvEntry=entry;
+  document.getElementById('pvTitle').textContent='Preview: '+entry.file.name.replace(/\.[^.]+$/,'')+'.stl';
+  document.getElementById('pvInfo').textContent=entry.triCount.toLocaleString()+' triangles';
+  document.getElementById('pvOverlay').classList.add('show');
+  requestAnimationFrame(()=>initPV(entry.stlData));
+}
+
+function closePV(){
+  document.getElementById('pvOverlay').classList.remove('show');
+  if(pvAnim){cancelAnimationFrame(pvAnim);pvAnim=null}
+  if(pvGL){pvGL=null}
+}
+
+function initPV(stlBuf){
+  const canvas=document.getElementById('pvCanvas');
+  canvas.width=canvas.offsetWidth*devicePixelRatio;
+  canvas.height=canvas.offsetHeight*devicePixelRatio;
+  const gl=canvas.getContext('webgl');
+  if(!gl){document.getElementById('pvInfo').textContent='WebGL not supported';return}
+  pvGL=gl;pvRot={x:0.4,y:0.3};pvDist=2.5;
+
+  // Detect binary vs ASCII STL
+  const header=new Uint8Array(stlBuf,0,Math.min(256,stlBuf.byteLength));
+  const headerStr=String.fromCharCode(...header);
+  const isAscii=headerStr.trimStart().startsWith('solid');
+
+  let posArr, nrmArr, triCount=0;
+
+  if(!isAscii && stlBuf.byteLength>84){
+    // ── Binary STL ──
+    const dv=new DataView(stlBuf);
+    triCount=dv.getUint32(80,true);
+    posArr=new Float32Array(triCount*9);
+    nrmArr=new Float32Array(triCount*9);
+    let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+    for(let i=0;i<triCount;i++){
+      const base=84+i*50;
+      const nx=dv.getFloat32(base,true),ny=dv.getFloat32(base+4,true),nz=dv.getFloat32(base+8,true);
+      for(let v=0;v<3;v++){
+        const vo=base+12+v*12;
+        const x=dv.getFloat32(vo,true),y=dv.getFloat32(vo+4,true),z=dv.getFloat32(vo+8,true);
+        posArr[(i*3+v)*3]=x;posArr[(i*3+v)*3+1]=y;posArr[(i*3+v)*3+2]=z;
+        nrmArr[(i*3+v)*3]=nx;nrmArr[(i*3+v)*3+1]=ny;nrmArr[(i*3+v)*3+2]=nz;
+        if(x<mn[0])mn[0]=x;if(y<mn[1])mn[1]=y;if(z<mn[2])mn[2]=z;
+        if(x>mx[0])mx[0]=x;if(y>mx[1])mx[1]=y;if(z>mx[2])mx[2]=z;
+      }
+    }
+    // Center+scale
+    const cx=(mn[0]+mx[0])/2,cy=(mn[1]+mx[1])/2,cz=(mn[2]+mx[2])/2;
+    const sc=Math.max(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2])||1;
+    for(let i=0;i<posArr.length;i+=3){posArr[i]=(posArr[i]-cx)/sc;posArr[i+1]=(posArr[i+1]-cy)/sc;posArr[i+2]=(posArr[i+2]-cz)/sc}
+  } else {
+    // ── ASCII STL ──
+    const text=new TextDecoder().decode(stlBuf);
+    const verts=[],norms=[];
+    const nRe=/facet normal\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g;
+    const vRe=/vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g;
+    let nm,vm;
+    while((nm=nRe.exec(text))!==null){
+      const nx=+nm[1],ny=+nm[2],nz=+nm[3];
+      for(let i=0;i<3;i++)norms.push(nx,ny,nz);
+    }
+    while((vm=vRe.exec(text))!==null) verts.push(+vm[1],+vm[2],+vm[3]);
+    triCount=verts.length/9;
+    posArr=new Float32Array(verts);
+    nrmArr=new Float32Array(norms.length===verts.length?norms:new Array(verts.length).fill(0));
+    // Center+scale
+    let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+    for(let i=0;i<posArr.length;i+=3){
+      if(posArr[i]<mn[0])mn[0]=posArr[i];if(posArr[i]>mx[0])mx[0]=posArr[i];
+      if(posArr[i+1]<mn[1])mn[1]=posArr[i+1];if(posArr[i+1]>mx[1])mx[1]=posArr[i+1];
+      if(posArr[i+2]<mn[2])mn[2]=posArr[i+2];if(posArr[i+2]>mx[2])mx[2]=posArr[i+2];
+    }
+    const cx=(mn[0]+mx[0])/2,cy=(mn[1]+mx[1])/2,cz=(mn[2]+mx[2])/2;
+    const sc=Math.max(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2])||1;
+    for(let i=0;i<posArr.length;i+=3){posArr[i]=(posArr[i]-cx)/sc;posArr[i+1]=(posArr[i+1]-cy)/sc;posArr[i+2]=(posArr[i+2]-cz)/sc}
+  }
+
+  document.getElementById('pvInfo').textContent=triCount.toLocaleString()+' triangles';
+  if(triCount===0){document.getElementById('pvInfo').textContent='No geometry found';return}
+
+  const vs=`attribute vec3 pos;attribute vec3 nrm;uniform mat4 uMVP;uniform mat3 uNM;
+varying vec3 vN;void main(){vN=normalize(uNM*nrm);gl_Position=uMVP*vec4(pos,1.0);}`;
+  const fs=`precision mediump float;varying vec3 vN;
+void main(){
+  vec3 L1=normalize(vec3(1,1.5,2));vec3 L2=normalize(vec3(-1,-0.5,-1));
+  float d1=max(dot(vN,L1),0.);float d2=max(dot(vN,L2),0.)*0.4;
+  vec3 col=vec3(0.48,0.55,1.0)*(0.18+d1)+vec3(0.3,0.9,0.8)*d2+vec3(1)*0.08;
+  gl_FragColor=vec4(col,1.0);}`;
+
+  function mkShader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s}
+  const prog=gl.createProgram();
+  gl.attachShader(prog,mkShader(gl.VERTEX_SHADER,vs));
+  gl.attachShader(prog,mkShader(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(prog);gl.useProgram(prog);
+
+  const pBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pBuf);gl.bufferData(gl.ARRAY_BUFFER,posArr,gl.STATIC_DRAW);
+  const pLoc=gl.getAttribLocation(prog,'pos');gl.enableVertexAttribArray(pLoc);gl.vertexAttribPointer(pLoc,3,gl.FLOAT,false,0,0);
+  const nBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nBuf);gl.bufferData(gl.ARRAY_BUFFER,nrmArr,gl.STATIC_DRAW);
+  const nLoc=gl.getAttribLocation(prog,'nrm');gl.enableVertexAttribArray(nLoc);gl.vertexAttribPointer(nLoc,3,gl.FLOAT,false,0,0);
+  const uMVP=gl.getUniformLocation(prog,'uMVP');const uNM=gl.getUniformLocation(prog,'uNM');
+
+  gl.enable(gl.DEPTH_TEST);gl.clearColor(0.02,0.04,0.09,1);
+
+  function mat4mul(a,b){const r=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i*4+k]*b[k*4+j];r[i*4+j]=s}return r}
+  function matRX(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1])}
+  function matRY(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1])}
+  function matPersp(fov,asp,n,f){const t=Math.tan(fov/2);return new Float32Array([1/(asp*t),0,0,0,0,1/t,0,0,0,0,-(f+n)/(f-n),-1,0,0,-2*f*n/(f-n),0])}
+  function matTrans(z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,z,1])}
+
+  function draw(){
+    const W=canvas.width,H=canvas.height;
+    gl.viewport(0,0,W,H);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    const rx=matRX(pvRot.x),ry=matRY(pvRot.y);
+    const model=mat4mul(ry,rx);
+    const view=matTrans(-pvDist);
+    const proj=matPersp(0.9,W/H,0.01,100);
+    const mv=mat4mul(view,model);
+    const mvp=mat4mul(proj,mv);
+    gl.uniformMatrix4fv(uMVP,false,mvp);
+    const nm=new Float32Array([model[0],model[1],model[2],model[4],model[5],model[6],model[8],model[9],model[10]]);
+    gl.uniformMatrix3fv(uNM,false,nm);
+    gl.drawArrays(gl.TRIANGLES,0,triCount*3);
+    pvAnim=requestAnimationFrame(draw);
+  }
+  draw();
+
+  // Mouse / touch controls
+  canvas.onmousedown=e=>{pvDrag=true;pvLast={x:e.clientX,y:e.clientY}};
+  canvas.onmouseup=()=>pvDrag=false;
+  canvas.onmouseleave=()=>pvDrag=false;
+  canvas.onmousemove=e=>{if(!pvDrag)return;pvRot.y+=(e.clientX-pvLast.x)*0.008;pvRot.x+=(e.clientY-pvLast.y)*0.008;pvLast={x:e.clientX,y:e.clientY}};
+  canvas.onwheel=e=>{pvDist=Math.max(0.5,Math.min(8,pvDist+e.deltaY*0.003));e.preventDefault()};
+
+  // Touch
+  let pvTouches=[];
+  canvas.ontouchstart=e=>{pvTouches=[...e.touches];e.preventDefault()};
+  canvas.ontouchmove=e=>{
+    if(e.touches.length===1){
+      pvRot.y+=(e.touches[0].clientX-pvTouches[0].clientX)*0.008;
+      pvRot.x+=(e.touches[0].clientY-pvTouches[0].clientY)*0.008;
+    } else if(e.touches.length===2&&pvTouches.length===2){
+      const d0=Math.hypot(pvTouches[0].clientX-pvTouches[1].clientX,pvTouches[0].clientY-pvTouches[1].clientY);
+      const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      pvDist=Math.max(0.5,Math.min(8,pvDist-(d1-d0)*0.01));
+    }
+    pvTouches=[...e.touches];e.preventDefault();
+  };
+}
+
+/* ══ REDIRECT MODAL ══ */
+function showRD(e,filename,failed=false){
+  document.getElementById('rdExt').textContent='.'+e.toUpperCase();
+  document.getElementById('rdFile').textContent=filename;
+  document.getElementById('rdTitle').textContent=
+    failed?'Conversion Failed — Try These Free Tools':'Can\'t Convert This Format';
+  document.getElementById('rdMsg').innerHTML=failed
+    ? '<strong>'+filename+'</strong> could not be converted.<br>These <strong>free sites</strong> can do it instantly:'
+    : '<strong>'+filename+'</strong> needs special CAD software to convert.<br>These <strong>free sites</strong> do it instantly:';
+  const sitesDiv=document.getElementById('rdSites');sitesDiv.innerHTML='';
+  const primary=REDIRECT_MAP[e];
+  const sites=primary?[primary,...FALLBACK_SITES.filter(s=>s.name!==primary.name)].slice(0,3):FALLBACK_SITES;
+  sites.forEach(s=>{
+    const a=document.createElement('a');
+    a.className='rd-site';a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';
+    a.innerHTML=`<strong>${s.name}</strong><span>${s.desc} ↗</span>`;
+    sitesDiv.appendChild(a);
+  });
+  document.getElementById('rdOverlay').classList.add('show');
+}
+function closeRD(){document.getElementById('rdOverlay').classList.remove('show')}
+
+/* ── CHATBOT ── */
+let chatOpen=false;
+let chatHistory=[];
+let chatBusy=false;
+
+function toggleChat(){
+  chatOpen=!chatOpen;
+  document.getElementById('chatWindow').classList.toggle('open',chatOpen);
+  document.getElementById('chatBadge').classList.remove('show');
+  if(chatOpen) setTimeout(()=>document.getElementById('chatInput').focus(),300);
+}
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,100)+'px';
+}
+
+function appendMsg(role,text){
+  const msgs=document.getElementById('chatMessages');
+  const div=document.createElement('div');
+  div.className='msg '+role;
+  const avatar=document.createElement('div');
+  avatar.className='msg-avatar';
+  avatar.textContent=role==='bot'?'F':'U';
+  const bubble=document.createElement('div');
+  bubble.className='msg-text';
+  bubble.textContent=text;
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return bubble;
+}
+
+function showTyping(){
+  const msgs=document.getElementById('chatMessages');
+  const div=document.createElement('div');
+  div.className='msg bot';div.id='typingIndicator';
+  div.innerHTML=`<div class="msg-avatar">F</div>
+  <div class="msg-text msg-typing">
+    <span></span><span></span><span></span>
+  </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function hideTyping(){
+  document.getElementById('typingIndicator')?.remove();
+}
+
+async function sendChat(){
+  if(chatBusy)return;
+  const input=document.getElementById('chatInput');
+  const msg=input.value.trim();
+  if(!msg)return;
+
+  input.value='';
+  input.style.height='auto';
+  chatBusy=true;
+  document.getElementById('chatSend').disabled=true;
+
+  // Show user message
+  appendMsg('user',msg);
+  chatHistory.push({role:'user',content:msg});
+
+  // Show typing
+  showTyping();
+
+  try{
+    const resp=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:msg,history:chatHistory.slice(-10)})
+    });
+    hideTyping();
+
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({error:'Server error'}));
+      appendMsg('bot','Sorry, something went wrong: '+(err.error||'Please try again.'));
+    } else {
+      const data=await resp.json();
+      const reply=data.reply||'Sorry, no response received.';
+      appendMsg('bot',reply);
+      chatHistory.push({role:'assistant',content:reply});
+      // Show badge if chat is closed
+      if(!chatOpen) document.getElementById('chatBadge').classList.add('show');
+    }
+  }catch(e){
+    hideTyping();
+    appendMsg('bot','Connection error. Make sure the server is running.');
+  }
+
+  chatBusy=false;
+  document.getElementById('chatSend').disabled=false;
+  document.getElementById('chatInput').focus();
+}
+
+const obs=new IntersectionObserver(en=>{en.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target)}})},{threshold:.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+/* ── SCROLL TOP ── */
+window.addEventListener('scroll',()=>{document.getElementById('scrollTop').classList.toggle('show',window.scrollY>400)},{passive:true});
+</script>
+</body>
+</html>
