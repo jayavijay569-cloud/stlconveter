@@ -42,23 +42,27 @@ def convert_to_stl(in_path: str, out_path: str):
 
     ext = get_ext(in_path)
 
-    # STEP / IGES — try cascadio (Open CASCADE Python bindings)
+    # STEP / STP / IGES / IGS / BREP — cascadio: STEP → GLB → trimesh
     if ext in ('.step', '.stp', '.iges', '.igs', '.brep'):
         try:
             import cascadio
-            mesh = cascadio.load(in_path)
-            # cascadio returns vertices + faces as numpy arrays
-            tm = trimesh.Trimesh(
-                vertices=np.array(mesh.vertices),
-                faces=np.array(mesh.faces),
-                process=True
-            )
+            # correct cascadio API: step_to_glb(in_path, out_path)
+            glb_path = in_path + '.glb'
+            cascadio.step_to_glb(in_path, glb_path)
+            loaded = trimesh.load(glb_path)
+            tm = _to_single_mesh(loaded)
+            try:
+                os.remove(glb_path)
+            except:
+                pass
         except ImportError:
-            # cascadio not available — use trimesh directly
-            # (works for simple STEP files; complex CAD may fail)
+            # cascadio not installed — trimesh direct (limited STEP support)
             loaded = trimesh.load(in_path, force='mesh')
             tm = _to_single_mesh(loaded)
+        except Exception as e:
+            raise RuntimeError(f"STEP/IGES conversion failed: {e}")
     else:
+        # OBJ, GLB, GLTF, FBX, DAE, PLY, 3MF, STL — trimesh handles directly
         loaded = trimesh.load(in_path, force='mesh')
         tm = _to_single_mesh(loaded)
 
