@@ -3,8 +3,9 @@ flask-cors==4.0.1
 werkzeug==3.0.3
 trimesh==4.4.1
 numpy==1.26.4
-gmsh==4.15.2
 gunicorn==22.0.0
+requests
+gmsh
 
 # For STEP/IGES conversion — uncomment ONE of these on Render:
 # Option A — cadquery (recommended, easier install)
