@@ -36,7 +36,7 @@ def convert_to_stl(in_path: str, out_path: str):
 
     script = f"""
 import gmsh, sys
-gmsh.initialize(["-noterm", "-nopopup", "-v", "0"])
+gmsh.initialize(["-noterm"])
 gmsh.option.setNumber("General.Terminal", 0)
 try:
     gmsh.model.add("model")
