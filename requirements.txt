@@ -11,4 +11,4 @@ gunicorn==22.0.0
 # cadquery==2.4.0
 
 # Option B — pythonOCC-core (lower level, same engine)
- pythonocc-core==7.7.2
+# pythonocc-core==7.7.2
