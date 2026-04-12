@@ -1,5 +1,7 @@
 """
-ForgeConvert Backend v5.1 — Flask + Trimesh + Cascadio + AI Chatbot
+ForgeConvert Backend v6.0
+STEP/STP/IGES → STL : trimesh + cascadio
+Chatbot        : Google Gemini API (free)
 """
 
 import os, io, uuid, zipfile, tempfile, traceback, requests
@@ -13,101 +15,81 @@ CORS(app)
 MAX_MB        = 500
 UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXT   = {'.step', '.stp', '.iges', '.igs', '.stl',
-                 '.obj', '.glb', '.gltf', '.fbx', '.3ds',
-                 '.dae', '.ply', '.3mf', '.brep', '.dxf'}
+                 '.obj', '.glb', '.gltf', '.ply', '.3mf', '.dae'}
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 def get_ext(fn): return os.path.splitext(fn.lower())[1]
 def allowed(fn): return get_ext(fn) in ALLOWED_EXT
 
 
-@app.route('/health')
-def health():
-    results = {'status': 'ok', 'formats': sorted(list(ALLOWED_EXT))}
-    try:
-        import trimesh
-        results['trimesh'] = trimesh.__version__
-    except Exception as e:
-        results['trimesh'] = f'ERROR: {e}'
-    try:
-        import cascadio
-        results['cascadio_attrs'] = [x for x in dir(cascadio) if not x.startswith('_')]
-    except Exception as e:
-        results['cascadio'] = f'ERROR: {e}'
-    return jsonify(results)
-
-
-def _to_single_mesh(loaded):
-    import trimesh
-    if isinstance(loaded, trimesh.Scene):
-        meshes = [g for g in loaded.geometry.values()
-                  if isinstance(g, trimesh.Trimesh) and len(g.faces) > 0]
-        if not meshes:
-            raise RuntimeError("Scene has no mesh geometry.")
-        return trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
-    elif isinstance(loaded, trimesh.Trimesh):
-        return loaded
-    else:
-        raise RuntimeError(f"Unknown geometry type: {type(loaded)}")
-
-
-def _export_stl(tm, out_path):
-    import trimesh
-    tm.remove_duplicate_faces()
-    tm.remove_degenerate_faces()
-    if not tm.is_watertight:
-        trimesh.repair.fill_holes(tm)
-        trimesh.repair.fix_normals(tm)
-    stl_bytes = tm.export(file_type='stl')
-    with open(out_path, 'wb') as f:
-        f.write(stl_bytes)
-    if os.path.getsize(out_path) == 0:
-        raise RuntimeError("Conversion produced empty STL.")
-
-
+# ── Conversion ────────────────────────────────────────────────
 def convert_to_stl(in_path: str, out_path: str):
     import trimesh
-
     ext = get_ext(in_path)
-    print(f'[DEBUG] ext={ext}, file={in_path}')
 
-    if ext in ('.step', '.stp', '.iges', '.igs', '.brep'):
+    if ext in ('.step', '.stp', '.iges', '.igs'):
+        # Try cascadio first (best for STEP/IGES)
         try:
             import cascadio
-            attrs = [x for x in dir(cascadio) if not x.startswith('_')]
-            print(f'[DEBUG] cascadio attrs: {attrs}')
-
             glb_path = in_path + '.glb'
-
             if hasattr(cascadio, 'step_to_glb'):
                 cascadio.step_to_glb(in_path, glb_path)
             elif hasattr(cascadio, 'convert'):
                 cascadio.convert(in_path, glb_path)
             else:
-                raise RuntimeError(f"No known cascadio function. Available: {attrs}")
-
+                raise ImportError("No usable cascadio function")
             loaded = trimesh.load(glb_path)
-            tm = _to_single_mesh(loaded)
             try: os.remove(glb_path)
             except: pass
-
-        except ImportError:
-            print('[DEBUG] cascadio not available, using trimesh directly')
-            loaded = trimesh.load(in_path, force='mesh')
-            tm = _to_single_mesh(loaded)
         except Exception as e:
-            print(f'[DEBUG] cascadio failed: {traceback.format_exc()}')
-            raise RuntimeError(f"STEP/IGES conversion failed: {e}")
+            print(f'[cascadio failed] {e} — trying trimesh direct')
+            loaded = trimesh.load(in_path, force='mesh')
     else:
         loaded = trimesh.load(in_path, force='mesh')
-        tm = _to_single_mesh(loaded)
 
-    if tm is None or len(tm.faces) == 0:
-        raise RuntimeError("No geometry found in file.")
+    # Handle Scene or Trimesh
+    if isinstance(loaded, trimesh.Scene):
+        meshes = [g for g in loaded.geometry.values()
+                  if isinstance(g, trimesh.Trimesh) and len(g.faces) > 0]
+        if not meshes:
+            raise RuntimeError("No mesh geometry found in file.")
+        tm = trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
+    elif isinstance(loaded, trimesh.Trimesh):
+        tm = loaded
+    else:
+        raise RuntimeError(f"Unknown geometry type: {type(loaded)}")
 
-    _export_stl(tm, out_path)
+    if len(tm.faces) == 0:
+        raise RuntimeError("Mesh has no faces.")
+
+    # Clean mesh
+    tm.remove_duplicate_faces()
+    tm.remove_degenerate_faces()
+
+    # Export STL
+    stl_bytes = tm.export(file_type='stl')
+    with open(out_path, 'wb') as f:
+        f.write(stl_bytes)
+
+    if os.path.getsize(out_path) == 0:
+        raise RuntimeError("Conversion produced empty STL.")
+
+
+# ── Routes ────────────────────────────────────────────────────
+@app.route('/health')
+def health():
+    info = {'status': 'ok', 'formats': sorted(ALLOWED_EXT)}
+    try:
+        import trimesh; info['trimesh'] = trimesh.__version__
+    except Exception as e:
+        info['trimesh'] = f'ERROR: {e}'
+    try:
+        import cascadio; info['cascadio'] = 'ok'
+    except Exception as e:
+        info['cascadio'] = f'missing: {e}'
+    return jsonify(info)
 
 
 @app.route('/convert', methods=['POST'])
@@ -117,6 +99,7 @@ def convert():
     f = request.files['file']
     if not f or not f.filename:
         return jsonify({'error': 'Empty filename'}), 400
+
     filename = secure_filename(f.filename)
     if not allowed(filename):
         return jsonify({'error': f'Unsupported: {get_ext(filename)}'}), 415
@@ -167,7 +150,6 @@ def convert_bulk():
                 zf.write(out_path, out_name)
             except Exception as e:
                 errors.append(f'{filename}: {e}')
-                print(f'[Bulk] FAILED {filename}: {traceback.format_exc()}')
             finally:
                 for p in [in_path, out_path]:
                     try:
@@ -187,30 +169,38 @@ def chat():
     data = request.get_json()
     if not data or 'message' not in data:
         return jsonify({'error': 'No message'}), 400
-    if not ANTHROPIC_API_KEY:
-        return jsonify({'error': 'ANTHROPIC_API_KEY not set'}), 500
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'GEMINI_API_KEY not set'}), 500
+
     user_message = data.get('message', '').strip()[:2000]
     history      = data.get('history', [])[-10:]
-    messages = []
+
+    SYSTEM = (
+        'You are ForgeBot, a helpful CAD and 3D printing expert for ForgeConvert. '
+        'Help users with STEP, IGES, OBJ, GLB to STL conversion and 3D printing tips. '
+        'Be concise and practical.'
+    )
+
+    contents = []
     for h in history:
-        if h.get('role') in ('user', 'assistant') and h.get('content'):
-            messages.append({'role': h['role'], 'content': h['content']})
-    messages.append({'role': 'user', 'content': user_message})
+        if h.get('role') == 'user':
+            contents.append({'role': 'user', 'parts': [{'text': h['content']}]})
+        elif h.get('role') == 'assistant':
+            contents.append({'role': 'model', 'parts': [{'text': h['content']}]})
+    contents.append({'role': 'user', 'parts': [{'text': user_message}]})
+
     try:
-        resp = requests.post(
-            'https://api.anthropic.com/v1/messages',
-            headers={'x-api-key': ANTHROPIC_API_KEY,
-                     'anthropic-version': '2023-06-01',
-                     'content-type': 'application/json'},
-            json={'model': 'claude-haiku-4-5-20251001', 'max_tokens': 1024,
-                  'system': 'You are ForgeBot, a CAD and 3D printing expert for ForgeConvert. Help with STEP, IGES, OBJ, FBX, GLB to STL conversion and 3D printing. Be concise.',
-                  'messages': messages},
-            timeout=30
-        )
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key={GEMINI_API_KEY}'
+        resp = requests.post(url, json={
+            'system_instruction': {'parts': [{'text': SYSTEM}]},
+            'contents': contents,
+            'generationConfig': {'maxOutputTokens': 1024, 'temperature': 0.7}
+        }, timeout=30)
         resp.raise_for_status()
-        return jsonify({'reply': resp.json()['content'][0]['text']})
+        reply = resp.json()['candidates'][0]['content']['parts'][0]['text']
+        return jsonify({'reply': reply})
     except requests.exceptions.Timeout:
-        return jsonify({'error': 'Timeout'}), 504
+        return jsonify({'error': 'Timeout. Try again.'}), 504
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -223,5 +213,5 @@ def index():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f'ForgeConvert v5.1 on http://0.0.0.0:{port}')
+    print(f'ForgeConvert v6.0 on http://0.0.0.0:{port}')
     app.run(host='0.0.0.0', port=port, debug=False)
