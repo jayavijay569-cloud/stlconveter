@@ -210,6 +210,17 @@ def chat():
 def google_verify():
     return 'google-site-verification: google2a3c218694012ee4.html'
 
+@app.route('/sitemap.xml')        
+def sitemap():
+    return '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://online-stl-converter.onrender.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>''', 200, {'Content-Type': 'application/xml'}
+
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
